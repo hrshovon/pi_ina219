@@ -3,7 +3,7 @@ from Texas Instruments with a Raspberry Pi using the I2C bus."""
 import logging
 import time
 from math import trunc
-import Adafruit_GPIO.I2C as I2C
+import smbus2 as I2C
 
 
 class INA219:
@@ -87,7 +87,7 @@ class INA219:
     # to guarantee that current overflow can always be detected.
     __CURRENT_LSB_FACTOR = 32800
 
-    def __init__(self, shunt_ohms, max_expected_amps=None, address=__ADDRESS,
+    def __init__(self,BUS_NO=0, shunt_ohms, max_expected_amps=None, address=__ADDRESS,
                  log_level=logging.ERROR):
         """ Construct the class passing in the resistance of the shunt
         resistor and the maximum expected current flowing through it in
@@ -102,7 +102,7 @@ class INA219:
             calculations (optional).
         """
         logging.basicConfig(level=log_level, format=self.__LOG_FORMAT)
-        self._i2c = I2C.get_i2c_device(address)
+        self._i2c=I2C.SMBus(BUS_NO)
         self._shunt_ohms = shunt_ohms
         self._max_expected_amps = max_expected_amps
         self._min_device_current_lsb = self._calculate_min_current_lsb()
@@ -357,13 +357,32 @@ class INA219:
             "write register 0x%02x: 0x%04x 0b%s" %
             (register, register_value,
              self.__binary_as_string(register_value)))
-        self._i2c.writeList(register, register_bytes)
+        self._i2c.write_i2c_block_data(__ADDRESS,register, register_bytes)
+
+    def readU16BE(self, register):
+        """Read an unsigned 16-bit value from the specified register, in big
+        endian byte order."""
+        return self._i2c.read_word_data(__ADDRESS,register)
+
+    def readS16(self, register):
+        """Read a signed 16-bit value from the specified register, with the
+        specified endianness (default little endian, or least significant byte
+        first)."""
+        result = self._i2c.read_word_data(__ADDRESS,register, little_endian)
+        if result > 32767:
+            result -= 65536
+        return result
+
+    def readS16BE(self, register):
+        """Read a signed 16-bit value from the specified register, in big
+        endian byte order."""
+        return self.readS16(register)
 
     def __read_register(self, register, negative_value_supported=False):
         if negative_value_supported:
-            register_value = self._i2c.readS16BE(register)
+            register_value = self.readS16BE(register)
         else:
-            register_value = self._i2c.readU16BE(register)
+            register_value = self.readU16BE(register)
         logging.debug(
             "read register 0x%02x: 0x%04x 0b%s" %
             (register, register_value,
